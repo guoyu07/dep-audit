@@ -88,7 +88,7 @@ class Normalizer(object):
         return dep.split('/')[-1]
 
     def short_sha(self, sha):
-        return sha[:6]
+        return sha[:7]
 
 
 def generate_csv_file(project_name, auditor, normalizer):
