@@ -20,31 +20,48 @@ NORMALIZATIONS = {
 
 
 class GithubRawFileFetcher(object):
-
     """ GithubRawFileFetcher will fetch raw file information from a remote Git project file"""
-
-    def __init__(self, org):
-        self.org = org
-
-    def fetch(self, project, filename):
-        url = 'https://raw.githubusercontent.com/%s/%s/master/%s'
-        conn = urllib2.urlopen(url % (self.org, project, filename))
-        return conn.read()
-
-    def fetch_toml(self, project, filename):
-        content = self.fetch(project, filename)
-        return toml.loads(content)
-
-
-class Auditor(object):
-
-    """ Auditor will extract a dict in the form {'k8s.io/kubernetes': 'fff5156092b56e6bd60fff75aad4dc9de6b6ef37'}
-        with the key as a third party dependency and a value as the exact Git SHA used currently """
 
     def __init__(self, org, project):
         self.org = org
         self.project = project
-        self.fetcher = GithubRawFileFetcher(self.org)
+
+    def __fetch(self, project, filename):
+        url = 'https://raw.githubusercontent.com/%s/%s/master/%s'
+        conn = urllib2.urlopen(url % (self.org, project, filename))
+        return conn.read()
+
+    def fetch_toml(self, filename):
+        content = self.__fetch(self.project, filename)
+        return toml.loads(content)
+
+class LocalRepoFetcher(object):
+    """ LocalRepoFetcher will fetch raw file information from a local project
+
+        For example:
+        fetcher = LocalRepoFetcher('/Users/owainlewis/go/src/github.com/foo/bar/')
+        print(fetcher.fetch_toml('Gopkg.toml'))
+    """
+
+    def __init__(self, location):
+        self.location = location
+
+    def __fetch(self, filename):
+        file_path = self.location + filename
+        with open(file_path) as io:
+            return io.read()
+
+    def fetch_toml(self, filename):
+        content = self.__fetch(filename)
+        return toml.loads(content)
+
+class Auditor(object):
+    """ Auditor will extract a dict in the form {'k8s.io/kubernetes': 'fff5156092b56e6bd60fff75aad4dc9de6b6ef37'}
+        with the key as a third party dependency and a value as the exact Git SHA used currently """
+
+    def __init__(self, project, fetcher):
+        self.project = project
+        self.fetcher = fetcher
 
     def __third_party_constraints(self, pkg, lock):
         """ Generates a map of dep : SHA for third party dependencies """
@@ -61,8 +78,8 @@ class Auditor(object):
         return result
 
     def audit(self):
-        pkg = self.fetcher.fetch_toml(self.project, "Gopkg.toml")
-        lock = self.fetcher.fetch_toml(self.project, "Gopkg.lock")
+        pkg = self.fetcher.fetch_toml("Gopkg.toml")
+        lock = self.fetcher.fetch_toml("Gopkg.lock")
 
         return self.__third_party_constraints(pkg, lock)
 
@@ -88,7 +105,7 @@ class Normalizer(object):
         return dep.split('/')[-1]
 
     def short_sha(self, sha):
-        return sha[:7]
+        return sha[:6]
 
 
 def generate_csv_file(project_name, auditor, normalizer):
@@ -102,18 +119,36 @@ def generate_csv_file(project_name, auditor, normalizer):
             dep_sha = normalizer.short_sha(sha)
             io.write('%s,%s,%s\n' % (dep_name, dep_short_name, dep_sha))
 
-
-def main(args):
-    if len(args) != 2:
-        print("Use: python audit.py org project_name i.e. python audit.py oracle oci-flexvolume-driver")
-        return sys.exit(1)
-
-    org = args[0]
-    project = args[1]
-    auditor = Auditor(org, project)
+def audit_remote_repo(org, project):
+    fetcher = GithubRawFileFetcher(org, project)
+    auditor = Auditor(project, fetcher)
     normalizer = Normalizer(ALIASES, NORMALIZATIONS)
     generate_csv_file(project, auditor, normalizer)
 
+def audit_local_repo(repo_path, project):
+    fetcher = LocalRepoFetcher(repo_path)
+    auditor = Auditor(project, fetcher)
+    normalizer = Normalizer(ALIASES, NORMALIZATIONS)
+    generate_csv_file(project, auditor, normalizer)
+
+def main(args):
+    # Kind can be { remote | local }
+    kind = args[0]
+    # python audit.py local /Users/owainlewis/go/src/github.com/oracle/project/ project
+    if kind == 'local':
+        print("Performing local project audit...")
+        repo_path = args[1]
+        project = args[2]
+        audit_local_repo(repo_path, project)
+    # python audit.py remote oracle oci-flexvolume-driver
+    elif kind == 'remote':
+        print("Performing remote audit...")
+        org = args[1]
+        project = args[2]
+        audit_remote_repo(org, project)
+    else:
+        print("Use: python audit.py {remote|local} args...")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
