@@ -104,9 +104,9 @@ def generate_csv_file(project_name, auditor, normalizer):
 
 
 def main(args):
-    if len(args) != 1:
+    if len(args) != 2:
         print("Use: python audit.py org project_name i.e. python audit.py oracle oci-flexvolume-driver")
-        return os.exit(1)
+        return sys.exit(1)
 
     org = args[0]
     project = args[1]
