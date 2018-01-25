@@ -119,18 +119,21 @@ def generate_csv_file(project_name, auditor, normalizer):
             dep_sha = normalizer.short_sha(sha)
             io.write('%s,%s,%s\n' % (dep_name, dep_short_name, dep_sha))
 
+            
 def audit_remote_repo(org, project):
     fetcher = GithubRawFileFetcher(org, project)
     auditor = Auditor(project, fetcher)
     normalizer = Normalizer(ALIASES, NORMALIZATIONS)
     generate_csv_file(project, auditor, normalizer)
 
+    
 def audit_local_repo(repo_path, project):
     fetcher = LocalRepoFetcher(repo_path)
     auditor = Auditor(project, fetcher)
     normalizer = Normalizer(ALIASES, NORMALIZATIONS)
     generate_csv_file(project, auditor, normalizer)
 
+    
 def main(args):
     # Kind can be { remote | local }
     kind = args[0]
@@ -150,5 +153,6 @@ def main(args):
         print("Use: python audit.py {remote|local} args...")
         sys.exit(1)
 
+        
 if __name__ == '__main__':
     main(sys.argv[1:])
